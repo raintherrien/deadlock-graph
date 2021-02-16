@@ -31,8 +31,8 @@ dump_flow(const Graph &g)
 	float height = header_height + g.num_threads * thread_lane_height;
 
 	std::puts(R"(<?xml version="1.0" encoding="UTF-8" standalone="no"?>)");
-	std::printf(R"(<svg width="%f" height="%f" viewBox="0 0 %f %f" xmlns="http://www.w3.org/2000/svg">)",
-	            width, height, width, height);
+	std::printf(R"(<svg viewBox="0 0 %f %f" xmlns="http://www.w3.org/2000/svg">)",
+	            width, height);
 	// styles
 	std::printf("<style>"
 	            "text{font-size:%fpx;text-anchor:middle;stroke:none}"
