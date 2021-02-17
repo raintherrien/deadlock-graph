@@ -56,6 +56,7 @@ Graph::Graph(std::istream &f)
 		Edge e;
 
 		slurp_line();
+		ls >> e.ts_ns;
 		ls >> e.head;
 		ls >> e.tail;
 		expect("");

@@ -11,20 +11,19 @@ struct FlowNode {
 	float x, y, width;
 };
 
-static std::vector<FlowNode> flow_nodes(const Graph &g);
+static std::vector<FlowNode> flow_nodes(const Graph &g, float timescale);
 
 constexpr float header_height = 16;
-constexpr float font_size = 8;
+constexpr float font_size = 6;
 constexpr float node_height = 16;
-constexpr float flow_node_text_vpadding = node_height / 2 + font_size / 4;
 constexpr float thread_lane_height = 30;
 constexpr float thread_lane_vpadding = (thread_lane_height - node_height) / 2;
-constexpr float timescale = 1.0f / 1000.0f; // 1px = 1us
+constexpr float flow_node_text_vpadding = node_height / 2 + font_size / 2;
 
 void
-dump_flow(const Graph &g)
+dump_flow(const Graph &g, float timescale)
 {
-	const auto fnodes = flow_nodes(g);
+	const auto fnodes = flow_nodes(g, timescale);
 
 	float time_delta = g.end_ns - g.begin_ns;
 	float width  = time_delta * timescale;
@@ -35,9 +34,9 @@ dump_flow(const Graph &g)
 	            width, height);
 	// styles
 	std::printf("<style>"
-	            "text{font-size:%fpx;text-anchor:middle;stroke:none}"
+	            "text{font-size:%fpx;stroke:none;text-anchor:middle}"
 	            "path{fill:none;stroke-opacity:0.5}"
-	            ".nodes rect{fill:lightgray}"
+	            ".nodes rect{fill:lightgray;stroke:black;stroke-width:0.5}"
 	            ".nodes text{fill:black}"
 	            ".EG g use:nth-child(1n){stroke-width:5;pointer-events:stroke}"
 	            ".EG g use:nth-child(2n){stroke-width:0.5;stroke:black}"
@@ -61,6 +60,9 @@ dump_flow(const Graph &g)
 		timestamp_interval = 1e9 / 120.0f; // every 120Hz (8.333ms)
 		timestamp_header = "8.333ms";
 	} else if (time_delta > 1e6) {
+		timestamp_interval = 1e6; // every 1ms
+		timestamp_header = "1ms";
+	} else if (time_delta > 10e3) {
 		timestamp_interval = 100e3; // every 100us
 		timestamp_header = "100μs";
 	} else {
@@ -89,7 +91,9 @@ dump_flow(const Graph &g)
 		}
 		std::puts("</title></rect>");
 		std::printf(R"(<text x="%f" y="%f">)", fnode.x + fnode.width / 2, fnode.y + flow_node_text_vpadding);
-		if (size_t(title_chars) >= node.label.size()) {
+		if (size_t(title_chars) >= desc.func.size() + node.label.size()) {
+			std::printf("%s: %s", desc.func.c_str(), node.label.c_str());
+		} else if (size_t(title_chars) >= node.label.size()) {
 			std::puts(node.label.c_str());
 		} else {
 			std::printf("%.*s...", std::max(0, title_chars - 3), node.label.c_str());
@@ -107,19 +111,33 @@ dump_flow(const Graph &g)
 		}
 		const FlowNode &fhead = *hit;
 		const FlowNode &ftail = *tit;
-		float startx = fhead.x + fhead.width;
-		float starty = fhead.y + node_height / 2;
-		float endx = ftail.x;
-		float endy = ftail.y + node_height / 2;
-		float third = (endx - startx) / 3;
-		if (starty == endy && (endx - startx) < 10)
-			continue;
-		std::printf(R"(<path id="E%lu-%lu" d="m%f,%f c%f,%f %f,%f %f,%f">)",
-		            edge.head, edge.tail,
-		            startx, starty,
-		            startx + std::max(third, 15.0f) - startx, 0.0f,
-		            endx   - std::max(third, 15.0f) - startx, endy - starty,
-		            endx - startx, endy - starty);
+		// Path from end of node or path from intra-node
+		if (std::abs((float)fhead.node.end_ns - edge.ts_ns) < 100) {
+			float startx = fhead.x + fhead.width;
+			float starty = fhead.y + node_height / 2;
+			float endx = ftail.x;
+			float endy = ftail.y + node_height / 2;
+			float thirdx = (endx - startx) / 3;
+			std::printf(R"(<path id="E%lu-%lu" d="m%f,%f c%f,%f %f,%f %f,%f">)",
+			            edge.head, edge.tail,
+			            startx, starty,
+			            startx + std::max(thirdx, 15.0f) - startx, 0.0f,
+			            endx   - std::max(thirdx, 15.0f) - startx, endy - starty,
+			            endx - startx, endy - starty);
+		} else {
+			float startx = fhead.x + (edge.ts_ns - fhead.node.begin_ns) * timescale;
+			float starty = fhead.y + (ftail.y > fhead.y ? node_height : 0);
+			float endx = ftail.x;
+			float endy = ftail.y + node_height / 2;
+			float thirdx = (endx - startx) / 3;
+			float cp0y = ftail.y > fhead.y ? thread_lane_vpadding : -thread_lane_vpadding;
+			std::printf(R"(<path id="E%lu-%lu" d="m%f,%f c%f,%f %f,%f %f,%f">)",
+			            edge.head, edge.tail,
+			            startx, starty,
+			            0.0f, cp0y,
+			            endx - std::max(thirdx, 15.0f) - startx, endy - starty,
+			            endx - startx, endy - starty);
+		}
 		std::printf(R"(<title>%s -> %s</title>)", fhead.node.label.c_str(), ftail.node.label.c_str());
 		std::puts("</path>");
 	}
@@ -137,7 +155,7 @@ dump_flow(const Graph &g)
 }
 
 static std::vector<FlowNode>
-flow_nodes(const Graph &g)
+flow_nodes(const Graph &g, float timescale)
 {
 	std::vector<FlowNode> fnodes;
 	for (const auto &node : g.nodes) {

@@ -18,6 +18,7 @@ struct NodeDescription {
 };
 
 struct Edge {
+	unsigned long long ts_ns;
 	unsigned long head;
 	unsigned long tail;
 };
@@ -44,6 +45,6 @@ struct Graph {
 };
 
 void dump_dot(const Graph &);
-void dump_flow(const Graph &);
+void dump_flow(const Graph &, float timescale);
 
 #endif // DEADLOCK_GRAPH_GRAPH_H_

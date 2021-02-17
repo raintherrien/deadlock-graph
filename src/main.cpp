@@ -12,6 +12,7 @@ main(int argc, char **argv)
 	try {
 		Graph g;
 		OutputFormat format = OutputFormat::DeadlockFlow;
+		float timescale = 1.0f / 10'000; // 1px = 100us
 		if (argc <= 1) {
 			usage();
 			throw std::runtime_error("Too few arguments");
@@ -24,6 +25,13 @@ main(int argc, char **argv)
 				return EXIT_SUCCESS;
 			} else if (strcmp(argv[i], "-d") == 0) {
 				format = OutputFormat::GraphvizDOT;
+			} else if (strcmp(argv[i], "-t") == 0) {
+				if (i == argc - 1) {
+					usage();
+					throw std::runtime_error("Missing timescale value");
+				}
+				timescale = 1.0f / std::stoi(argv[i+1]);
+				++ i;
 			} else if (strcmp(argv[i], "--") == 0) {
 				if (i != argc - 1) {
 					usage();
@@ -47,7 +55,7 @@ main(int argc, char **argv)
 		if (format == OutputFormat::GraphvizDOT) {
 			dump_dot(g);
 		} else {
-			dump_flow(g);
+			dump_flow(g, timescale);
 		}
 	} catch (const std::ifstream::failure &e) {
 		std::cerr << "Error: Could not parse file" << std::endl;
@@ -60,10 +68,11 @@ main(int argc, char **argv)
 static void
 usage()
 {
-	std::cout << "Usage: deadlock-graph [-d] [--|file]\n"
+	std::cerr << "Usage: deadlock-graph [-d] [--|file]\n"
 	          << "Options:\n"
 	          << "  --         Read from stdin.\n"
 	          << "  -d         Output in Graphviz DOT format.\n"
+	          << "  -t [ns]    Timescale, number of nanoseconds per pixel in flow graph\n"
 	          << "  -h --help  Display this information.\n"
 	          << std::endl;
 }
