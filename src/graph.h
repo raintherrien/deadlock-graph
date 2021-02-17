@@ -45,6 +45,6 @@ struct Graph {
 };
 
 void dump_dot(const Graph &);
-void dump_flow(const Graph &, float timescale);
+void dump_flow(const Graph &, double timescale);
 
 #endif // DEADLOCK_GRAPH_GRAPH_H_

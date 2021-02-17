@@ -8,56 +8,89 @@
 struct FlowNode {
 	const Node &node;
 	unsigned long task;
-	float x, y, width;
+	int x, y, width;
 };
 
-static std::vector<FlowNode> flow_nodes(const Graph &g, float timescale);
+struct FlowEdgeSpawnAnnotation {
+	int ts_ns, x, y;
+	bool top;
+};
 
-constexpr float header_height = 16;
-constexpr float font_size = 6;
-constexpr float node_height = 16;
-constexpr float thread_lane_height = 30;
-constexpr float thread_lane_vpadding = (thread_lane_height - node_height) / 2;
-constexpr float flow_node_text_vpadding = node_height / 2 + font_size / 2;
+struct FlowEdgeArrow {
+	int x, y;
+};
+
+enum FlowEdgeFlags : unsigned {
+	None         = 0,
+	Intermediate = 1 << 0 // edge begins within node, with timestamp
+};
+
+struct FlowEdge {
+	unsigned long head;
+	unsigned long tail;
+	int startx;
+	int starty;
+	int endx;
+	int endy;
+	enum FlowEdgeFlags flags;
+};
+
+static std::vector<FlowNode> flow_nodes(const Graph &g, double timescale);
+
+constexpr int header_height = 32;
+constexpr int font_size = 16;
+constexpr int node_height = 48;
+constexpr int thread_lane_height = 96;
+constexpr int thread_lane_vpadding = (thread_lane_height - node_height) / 2;
+constexpr int node_text_hpadding = 8;
+constexpr int node_text_vpadding = node_height / 2;
+constexpr int sharpest_edge_offset = 32;
+constexpr int edge_triangle_offset = 5;
+constexpr int edge_annotation_vpadding = 2;
+constexpr int edge_spawn_annotation_buffer = 8;
 
 void
-dump_flow(const Graph &g, float timescale)
+dump_flow(const Graph &g, double timescale)
 {
 	const auto fnodes = flow_nodes(g, timescale);
 
-	float time_delta = g.end_ns - g.begin_ns;
-	float width  = time_delta * timescale;
-	float height = header_height + g.num_threads * thread_lane_height;
+	unsigned long long time_delta = g.end_ns - g.begin_ns;
+	if (time_delta * timescale > std::numeric_limits<int>::max()) {
+		throw std::runtime_error("Timescale out of range");
+	}
+	int width  = time_delta * timescale;
+	int height = header_height + g.num_threads * thread_lane_height;
 
 	std::puts(R"(<?xml version="1.0" encoding="UTF-8" standalone="no"?>)");
-	std::printf(R"(<svg viewBox="0 0 %f %f" xmlns="http://www.w3.org/2000/svg">)",
-	            width, height);
+	std::printf(R"(<svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">)",
+	            width, height, width, height);
 	// styles
 	std::printf("<style>"
-	            "text{font-size:%fpx;stroke:none;text-anchor:middle}"
-	            "path{fill:none;stroke-opacity:0.5}"
-	            ".nodes rect{fill:lightgray;stroke:black;stroke-width:0.5}"
+	            "text{font-size:%dpx;stroke:none;dominant-baseline:middle}"
+	            "path{fill:none}"
+	            ".nodes rect{fill:lightgray;stroke:black}"
 	            ".nodes text{fill:black}"
 	            ".EG g use:nth-child(1n){stroke-width:5;pointer-events:stroke}"
-	            ".EG g use:nth-child(2n){stroke-width:0.5;stroke:black}"
+	            ".EG g use:nth-child(2n){stroke-width:1;stroke:black}"
 	            ".EG g:hover use:nth-child(2n){stroke:red;stroke-opacity:1;stroke-width:2}"
-	            "</style>", font_size);
+	            ".Ea{font-size:%dpx}"
+	            "</style>", font_size, font_size / 3);
 	// thread dividers
 	std::puts(R"(<g stroke="gray" stroke-width="0.3" stroke-dasharray="2">)");
 	for (unsigned long i = 0; i < g.num_threads+1; ++ i) {
-		float y = header_height + i * thread_lane_height;
-		std::printf(R"(<line x2="%f" y1="%f" y2="%f"/>)", width, y, y);
+		int y = header_height + i * thread_lane_height;
+		std::printf(R"(<line x2="%d" y1="%d" y2="%d"/>)", width, y, y);
 	}
 	std::puts("</g>");
 	// timestamps
 	std::puts(R"(<g stroke="crimson" stroke-width="0.3">)");
-	float timestamp_interval;
+	double timestamp_interval;
 	const char *timestamp_header;
 	if (time_delta > 1e9) {
-		timestamp_interval = 1e9 / 60.0f; // every 60Hz (16.666ms)
+		timestamp_interval = 1e9 / 60.0; // every 60Hz (16.666ms)
 		timestamp_header = "16.666ms";
 	} else if (time_delta > 100e6) {
-		timestamp_interval = 1e9 / 120.0f; // every 120Hz (8.333ms)
+		timestamp_interval = 1e9 / 120.0; // every 120Hz (8.333ms)
 		timestamp_header = "8.333ms";
 	} else if (time_delta > 1e6) {
 		timestamp_interval = 1e6; // every 1ms
@@ -69,10 +102,10 @@ dump_flow(const Graph &g, float timescale)
 		timestamp_interval = 50e3; // every 50us
 		timestamp_header = "50μs";
 	}
-	unsigned long long maxt = (g.end_ns - g.begin_ns) / timestamp_interval;
-	for (unsigned long long t = 1; t < maxt; ++ t) {
-		float x = t * timestamp_interval * timescale;
-		std::printf(R"(<line x1="%f" x2="%f" y1="%f" y2="%f"/>)", x, x, header_height, height);
+	double maxt = (g.end_ns - g.begin_ns) / timestamp_interval;
+	for (double t = 1; t < maxt; ++ t) {
+		int x = std::lroundf(t * timestamp_interval * timescale);
+		std::printf(R"(<line x1="%d" x2="%d" y1="%d" y2="%d"/>)", x, x, header_height, height);
 	}
 	std::printf(R"(<text x="%f" y="%f">%s</text>)", timestamp_interval * timescale, header_height * .75, timestamp_header);
 	std::puts("</g>");
@@ -84,13 +117,13 @@ dump_flow(const Graph &g, float timescale)
 		const NodeDescription &desc = g.node_descriptions.at(node.description);
 		float ms = (node.end_ns - node.begin_ns) / 1000'000.0f;
 		int title_chars = std::floor(fnode.width * 2 / font_size);
-		std::printf(R"(<rect x="%f" y="%f" width="%f" height="%f">)", fnode.x, fnode.y, fnode.width, node_height);
+		std::printf(R"(<rect x="%d" y="%d" width="%d" height="%d">)", fnode.x, fnode.y, fnode.width, node_height);
 		std::printf("<title>%s:%lu: %s\n%fms", desc.file.c_str(), desc.line, desc.func.c_str(), ms);
 		if (size_t(title_chars) < node.label.size()) {
 			std::printf("\n%s", node.label.c_str());
 		}
 		std::puts("</title></rect>");
-		std::printf(R"(<text x="%f" y="%f">)", fnode.x + fnode.width / 2, fnode.y + flow_node_text_vpadding);
+		std::printf(R"(<text x="%d" y="%d">)", fnode.x + node_text_hpadding, fnode.y + node_text_vpadding);
 		if (size_t(title_chars) >= desc.func.size() + node.label.size()) {
 			std::printf("%s: %s", desc.func.c_str(), node.label.c_str());
 		} else if (size_t(title_chars) >= node.label.size()) {
@@ -102,7 +135,9 @@ dump_flow(const Graph &g, float timescale)
 	}
 	std::puts("</g>");
 	// edges
-	std::puts("<defs>");
+	std::vector<FlowEdgeSpawnAnnotation> edge_spawn_annotations;
+	std::vector<FlowEdgeArrow> edge_arrows;
+	std::vector<FlowEdge> edges;
 	for (const auto &edge : g.edges) {
 		const auto hit = std::find_if(std::begin(fnodes), std::end(fnodes), [&](const auto &fn) { return fn.task == edge.head; });
 		const auto tit = std::find_if(std::begin(fnodes), std::end(fnodes), [&](const auto &fn) { return fn.task == edge.tail; });
@@ -111,38 +146,83 @@ dump_flow(const Graph &g, float timescale)
 		}
 		const FlowNode &fhead = *hit;
 		const FlowNode &ftail = *tit;
-		// Path from end of node or path from intra-node
-		if (std::abs((float)fhead.node.end_ns - edge.ts_ns) < 100) {
-			float startx = fhead.x + fhead.width;
-			float starty = fhead.y + node_height / 2;
-			float endx = ftail.x;
-			float endy = ftail.y + node_height / 2;
-			float thirdx = (endx - startx) / 3;
-			std::printf(R"(<path id="E%lu-%lu" d="m%f,%f c%f,%f %f,%f %f,%f">)",
-			            edge.head, edge.tail,
-			            startx, starty,
-			            startx + std::max(thirdx, 15.0f) - startx, 0.0f,
-			            endx   - std::max(thirdx, 15.0f) - startx, endy - starty,
-			            endx - startx, endy - starty);
+		int endx = ftail.x;
+		int endy = ftail.y + node_height / 2;
+		edge_arrows.emplace_back(FlowEdgeArrow{endx, endy});
+		if (fhead.y == ftail.y && (double(ftail.node.begin_ns) - fhead.node.end_ns) * timescale < 10) {
+			continue; // skip edges shorter than arrow
+		} else if ((double(fhead.node.end_ns) - edge.ts_ns) * timescale < 8) {
+			// path from end of node
+			int startx = fhead.x + fhead.width;
+			int starty = fhead.y + node_height / 2;
+			edges.emplace_back(FlowEdge{edge.head, edge.tail, startx, starty, endx, endy, FlowEdgeFlags::None});
 		} else {
-			float startx = fhead.x + (edge.ts_ns - fhead.node.begin_ns) * timescale;
-			float starty = fhead.y + (ftail.y > fhead.y ? node_height : 0);
-			float endx = ftail.x;
-			float endy = ftail.y + node_height / 2;
-			float thirdx = (endx - startx) / 3;
-			float cp0y = ftail.y > fhead.y ? thread_lane_vpadding : -thread_lane_vpadding;
-			std::printf(R"(<path id="E%lu-%lu" d="m%f,%f c%f,%f %f,%f %f,%f">)",
-			            edge.head, edge.tail,
-			            startx, starty,
-			            0.0f, cp0y,
-			            endx - std::max(thirdx, 15.0f) - startx, endy - starty,
-			            endx - startx, endy - starty);
+			// path from intra-node
+			bool bottom = ftail.y > fhead.y;
+			int dns = edge.ts_ns - fhead.node.begin_ns;
+			int startx = fhead.x + dns * timescale;
+			int starty = fhead.y + (bottom ? node_height : 0);
+			edges.emplace_back(FlowEdge{edge.head, edge.tail, startx, starty, endx, endy, FlowEdgeFlags::Intermediate});
+			starty += bottom ? -edge_annotation_vpadding : edge_annotation_vpadding;
+			edge_spawn_annotations.emplace_back(FlowEdgeSpawnAnnotation{dns, startx, starty, !bottom});
 		}
-		std::printf(R"(<title>%s -> %s</title>)", fhead.node.label.c_str(), ftail.node.label.c_str());
-		std::puts("</path>");
 	}
+	// Sort annotations and trim overlapping
+	std::sort(edge_spawn_annotations.begin(),
+	          edge_spawn_annotations.end(),
+	          [](const auto &a, const auto &b) {
+			if (a.y < b.y) return true;
+			if (b.y < a.y) return false;
+			if (a.x < b.x) return true;
+			if (a.x > b.x) return false;
+			return a.ts_ns < b.ts_ns; // bogus
+		});
+	for (auto it = edge_spawn_annotations.begin(); it != edge_spawn_annotations.end();) {
+		auto next = std::next(it);
+		if (next == edge_spawn_annotations.end())
+			break;
+		if (next->y == it->y && std::abs(next->x - it->x) < edge_spawn_annotation_buffer) {
+			it = std::prev(edge_spawn_annotations.erase(next));
+		} else {
+			++ it;
+		}
+	}
+	for (const auto &annotation : edge_spawn_annotations) {
+		std::printf(R"#(<text class="Ea" transform="translate(%d,%d) rotate(-60)" style="text-anchor:%s;">%dμs</text>)#",
+		            annotation.x, annotation.y,
+		            annotation.top ? "end" : "start",
+		            annotation.ts_ns / 1000);
+	}
+	for (const auto &arrow : edge_arrows) {
+		std::printf(R"(<polygon points="%d,%d %d,%d %d,%d"/>)",
+		            arrow.x - edge_triangle_offset, arrow.y + 5,
+		            arrow.x - edge_triangle_offset, arrow.y - 5,
+		            arrow.x + edge_triangle_offset, arrow.y);
+	}
+	std::puts("<defs>");
+	for (const auto &edge : edges) {
+		if (edge.flags & FlowEdgeFlags::Intermediate) {
+			std::printf(R"(<path id="E%lu-%lu" d="m%d,%d Q%d,%d %d,%d"/>)",
+			            edge.head, edge.tail,
+			            edge.startx, edge.starty,
+			            std::min(edge.endx - sharpest_edge_offset, edge.startx), edge.endy,
+			            edge.endx - edge_triangle_offset, edge.endy);
+		} else {
+			int midx = (edge.startx + edge.endx) / 2;
+			int midy = (edge.starty + edge.endy) / 2;
+			std::printf(R"(<path id="E%lu-%lu" d="m%d,%d Q%d,%d %d,%d %d,%d %d,%d"/>)",
+			            edge.head, edge.tail,
+			            edge.startx, edge.starty,
+			            std::max(edge.startx + sharpest_edge_offset, midx), edge.starty,
+			            midx, midy,
+			            std::min(edge.endx - sharpest_edge_offset, midx), edge.endy,
+			            edge.endx - edge_triangle_offset, edge.endy);
+		}
+
+	}
+
 	std::puts("</defs><g class=\"EG\"><g>");
-	unsigned long prior_head = UINT_MAX;
+	unsigned long prior_head = std::numeric_limits<unsigned long>::max();
 	for (const auto &edge : g.edges) {
 		if (edge.head != prior_head) {
 			std::puts("</g><g>");
@@ -155,13 +235,13 @@ dump_flow(const Graph &g, float timescale)
 }
 
 static std::vector<FlowNode>
-flow_nodes(const Graph &g, float timescale)
+flow_nodes(const Graph &g, double timescale)
 {
 	std::vector<FlowNode> fnodes;
 	for (const auto &node : g.nodes) {
-		float x = (node.begin_ns - g.begin_ns) * timescale;
-		float y = header_height + thread_lane_vpadding + node.thread * thread_lane_height;
-		float width = std::max(1.0f, (node.end_ns - node.begin_ns) * timescale);
+		int x = (node.begin_ns - g.begin_ns) * timescale;
+		int y = header_height + thread_lane_vpadding + node.thread * thread_lane_height;
+		int width = std::max(1.0, (node.end_ns - node.begin_ns) * timescale);
 		fnodes.emplace_back(FlowNode{node, node.task, x, y, width});
 	}
 	return fnodes;

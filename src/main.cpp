@@ -12,7 +12,7 @@ main(int argc, char **argv)
 	try {
 		Graph g;
 		OutputFormat format = OutputFormat::DeadlockFlow;
-		float timescale = 1.0f / 10'000; // 1px = 100us
+		double timescale = 1.0 / 10'000; // 1px = 100us
 		if (argc <= 1) {
 			usage();
 			throw std::runtime_error("Too few arguments");
@@ -30,7 +30,7 @@ main(int argc, char **argv)
 					usage();
 					throw std::runtime_error("Missing timescale value");
 				}
-				timescale = 1.0f / std::stoi(argv[i+1]);
+				timescale = 1.0 / std::stoi(argv[i+1]);
 				++ i;
 			} else if (strcmp(argv[i], "--") == 0) {
 				if (i != argc - 1) {
