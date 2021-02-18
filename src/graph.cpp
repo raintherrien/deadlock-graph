@@ -45,6 +45,23 @@ Graph::Graph(std::istream &f)
 		node_descriptions.emplace_back(d);
 	}
 
+	// Read number of continuations
+	slurp_line();
+	std::size_t continuation_count;
+	ls >> continuation_count;
+	expect(" continuations");
+	// Read continuations
+	for (std::size_t i = 0; i < continuation_count; ++ i) {
+		Continuation c;
+
+		slurp_line();
+		ls >> c.head;
+		ls >> c.tail;
+		expect("");
+
+		continuations.emplace_back(c);
+	}
+
 	// Read number of edges
 	slurp_line();
 	std::size_t edge_count;

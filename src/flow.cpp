@@ -70,6 +70,8 @@ dump_flow(const Graph &g, double timescale)
 	            "path{fill:none}"
 	            ".nodes rect{fill:lightgray;stroke:black}"
 	            ".nodes text{fill:black}"
+	            "path.C{stroke:black;fill:lavender;stroke-dasharray:4;stroke-width:0.5}"
+	            "rect.C{fill:lavender}"
 	            ".EG g use:nth-child(1n){stroke-width:5;pointer-events:stroke}"
 	            ".EG g use:nth-child(2n){stroke-width:1;stroke:black}"
 	            ".EG g:hover use:nth-child(2n){stroke:red;stroke-opacity:1;stroke-width:2}"
@@ -109,6 +111,39 @@ dump_flow(const Graph &g, double timescale)
 	}
 	std::printf(R"(<text x="%f" y="%f">%s</text>)", timestamp_interval * timescale, header_height * .75, timestamp_header);
 	std::puts("</g>");
+	// continuations
+	for (const auto &continuation : g.continuations) {
+		const auto hit = std::find_if(std::begin(fnodes), std::end(fnodes), [&](const auto &fn) { return fn.task == continuation.head; });
+		const auto tit = std::find_if(std::begin(fnodes), std::end(fnodes), [&](const auto &fn) { return fn.task == continuation.tail; });
+		if (hit == std::end(fnodes) || tit == std::end(fnodes)) {
+			throw std::runtime_error("Continuation references non-existent node");
+		}
+		const FlowNode &fhead = *hit;
+		const FlowNode &ftail = *tit;
+		int sx = fhead.x + fhead.width;
+		int sy = fhead.y;
+		int ex = ftail.x;
+		int ey = ftail.y;
+		int mx = (sx + ex) / 2;
+		int my = (sy + ey) / 2;
+		std::printf(R"(<path class="C" d="m%d,%d L%d,%d Q%d,%d  %d,%d   %d,%d   %d,%d L%d,%d Q%d,%d %d,%d %d,%d %d,%d"/>)",
+		            sx, sy + node_height, // start at node right edge bottom corner
+		            sx, sy,               // line to node right edge top corner
+
+		            // quadratic curve from right edge top corner to left edge top corner
+		            mx, sy,
+		            mx, my,
+		            mx, ey,
+		            ex, ey,
+
+		            ex, ey + node_height,  // line to node left edge bottom corner
+
+		            // quadratic curve from left edge bottom corner to right edge bottom corner
+		            mx, ey + node_height,
+		            mx, my + node_height,
+		            mx, sy + node_height,
+		            sx, sy + node_height);
+	}
 	// nodes
 	std::puts(R"(<g class="nodes">)");
 	for (std::size_t i = 0; i < fnodes.size(); ++ i) {
@@ -117,7 +152,8 @@ dump_flow(const Graph &g, double timescale)
 		const NodeDescription &desc = g.node_descriptions.at(node.description);
 		float ms = (node.end_ns - node.begin_ns) / 1000'000.0f;
 		int title_chars = std::floor(fnode.width * 2 / font_size);
-		std::printf(R"(<rect x="%d" y="%d" width="%d" height="%d">)", fnode.x, fnode.y, fnode.width, node_height);
+		bool is_continuation = g.continuations.end() != std::find_if(g.continuations.begin(), g.continuations.end(), [&](const auto &c) { return c.tail == node.task; }); // XXX bad hack
+		std::printf(R"(<rect %s x="%d" y="%d" width="%d" height="%d">)", is_continuation ? R"(class="C")" : "", fnode.x, fnode.y, fnode.width, node_height);
 		std::printf("<title>%s:%lu: %s\n%fms", desc.file.c_str(), desc.line, desc.func.c_str(), ms);
 		if (size_t(title_chars) < node.label.size()) {
 			std::printf("\n%s", node.label.c_str());

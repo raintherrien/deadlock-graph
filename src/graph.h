@@ -17,6 +17,11 @@ struct NodeDescription {
 	unsigned long line;
 };
 
+struct Continuation {
+	unsigned long head;
+	unsigned long tail;
+};
+
 struct Edge {
 	unsigned long long ts_ns;
 	unsigned long head;
@@ -34,6 +39,7 @@ struct Node {
 
 struct Graph {
 	std::vector<NodeDescription> node_descriptions;
+	std::vector<Continuation> continuations;
 	std::vector<Edge> edges;
 	std::vector<Node> nodes;
 	unsigned long long begin_ns = std::numeric_limits<unsigned long long>::max();
