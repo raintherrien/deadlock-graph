@@ -57,7 +57,7 @@ main(int argc, char **argv)
 		} else {
 			dump_flow(g, timescale);
 		}
-	} catch (const std::ifstream::failure &e) {
+	} catch (const std::ifstream::failure &) {
 		std::cerr << "Error: Could not parse file" << std::endl;
 	} catch (const std::exception &e) {
 		std::cerr << "Error: " << e.what() << std::endl;

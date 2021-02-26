@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 project(deadlock-graph VERSION 0.1 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD          20)
+set(CMAKE_CXX_STANDARD          17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Try to compile release
@@ -16,7 +16,7 @@ endif()
 # Add warnings
 # Note: add_compile_options propegates these options to e.g. examples.
 set(DEADLOCK_GRAPH_MSVC_WARNFLAGS /W4 /WX)
-set(DEADLOCK_GRAPH_OTHR_WARNFLAGS -Wall -Werror -Wextra -pedantic)
+set(DEADLOCK_GRAPH_OTHR_WARNFLAGS -Wall -Werror -Wextra -Wno-c++98-compat -Wno-c++98-compat-pedantic)
 add_compile_options("$<IF:$<C_COMPILER_ID:MSVC>,${DEADLOCK_GRAPH_MSVC_WARNFLAGS},${DEADLOCK_GRAPH_OTHR_WARNFLAGS}>")
 
 set(DEADLOCK_GRAPH_SOURCES ${PROJECT_SOURCE_DIR}/src/dot.cpp

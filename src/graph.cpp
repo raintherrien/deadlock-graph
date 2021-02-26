@@ -1,5 +1,6 @@
 #include "graph.h"
 
+#include <algorithm>
 #include <sstream>
 
 Graph::Graph(std::istream &f)
@@ -14,13 +15,13 @@ Graph::Graph(std::istream &f)
 		ls = std::stringstream{l};
 	};
 
-	auto expect = [&](const std::string &expect) {
+	auto expect = [&](const std::string &e) {
 		std::string rest;
 		std::getline(ls, rest);
-		if (rest == expect) {
+		if (rest == e) {
 			return;
 		}
-		throw std::runtime_error("Expected \"" + expect	+ "\" on line " + std::to_string(line) + " but found \"" + rest + "\"");
+		throw std::runtime_error("Expected \"" + e	+ "\" on line " + std::to_string(line) + " but found \"" + rest + "\"");
 	};
 
 	// Read number of node descriptions

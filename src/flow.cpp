@@ -1,5 +1,7 @@
 #include "graph.h"
 
+#include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <climits>
 #include <cmath>
@@ -54,15 +56,15 @@ dump_flow(const Graph &g, double timescale)
 {
 	const auto fnodes = flow_nodes(g, timescale);
 
-	unsigned long long time_delta = g.end_ns - g.begin_ns;
-	if (time_delta * timescale > std::numeric_limits<int>::max()) {
+	double time_delta = double(g.end_ns - g.begin_ns);
+	if (time_delta > std::floor(std::numeric_limits<int>::max() / timescale)) {
 		throw std::runtime_error("Timescale out of range");
 	}
-	int width  = time_delta * timescale;
-	int height = header_height + g.num_threads * thread_lane_height;
+	long width  = std::lround(time_delta * timescale);
+	long height = header_height + long(g.num_threads) * thread_lane_height;
 
 	std::puts(R"(<?xml version="1.0" encoding="UTF-8" standalone="no"?>)");
-	std::printf(R"(<svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">)",
+	std::printf(R"(<svg width="%ld" height="%ld" viewBox="0 0 %ld %ld" xmlns="http://www.w3.org/2000/svg">)",
 	            width, height, width, height);
 	// styles
 	std::printf("<style>"
@@ -80,8 +82,8 @@ dump_flow(const Graph &g, double timescale)
 	// thread dividers
 	std::puts(R"(<g stroke="gray" stroke-width="0.3" stroke-dasharray="2">)");
 	for (unsigned long i = 0; i < g.num_threads+1; ++ i) {
-		int y = header_height + i * thread_lane_height;
-		std::printf(R"(<line x2="%d" y1="%d" y2="%d"/>)", width, y, y);
+		long y = header_height + long(i) * thread_lane_height;
+		std::printf(R"(<line x2="%ld" y1="%ld" y2="%ld"/>)", width, y, y);
 	}
 	std::puts("</g>");
 	// timestamps
@@ -104,10 +106,10 @@ dump_flow(const Graph &g, double timescale)
 		timestamp_interval = 50e3; // every 50us
 		timestamp_header = "50μs";
 	}
-	double maxt = (g.end_ns - g.begin_ns) / timestamp_interval;
+	double maxt = double(g.end_ns - g.begin_ns) / timestamp_interval;
 	for (double t = 1; t < maxt; ++ t) {
-		int x = std::lroundf(t * timestamp_interval * timescale);
-		std::printf(R"(<line x1="%d" x2="%d" y1="%d" y2="%d"/>)", x, x, header_height, height);
+		long x = std::lround(t * timestamp_interval * timescale);
+		std::printf(R"(<line x1="%ld" x2="%ld" y1="%d" y2="%ld"/>)", x, x, header_height, height);
 	}
 	std::printf(R"(<text x="%f" y="%f">%s</text>)", timestamp_interval * timescale, header_height * .75, timestamp_header);
 	std::puts("</g>");
@@ -150,22 +152,22 @@ dump_flow(const Graph &g, double timescale)
 		const auto &node  = g.nodes[i];
 		const auto &fnode = fnodes[i];
 		const NodeDescription &desc = g.node_descriptions.at(node.description);
-		float ms = (node.end_ns - node.begin_ns) / 1000'000.0f;
-		int title_chars = std::floor(fnode.width * 2 / font_size);
+		double ms = double(node.end_ns - node.begin_ns) / 1000'000;
+		long title_chars = std::lround(double(fnode.width) * 2 / font_size);
 		bool is_continuation = g.continuations.end() != std::find_if(g.continuations.begin(), g.continuations.end(), [&](const auto &c) { return c.tail == node.task; }); // XXX bad hack
 		std::printf(R"(<rect %s x="%d" y="%d" width="%d" height="%d">)", is_continuation ? R"(class="C")" : "", fnode.x, fnode.y, fnode.width, node_height);
 		std::printf("<title>%s:%lu: %s\n%fms", desc.file.c_str(), desc.line, desc.func.c_str(), ms);
-		if (size_t(title_chars) < node.label.size()) {
+		if (title_chars > 0 && size_t(title_chars) < node.label.size()) {
 			std::printf("\n%s", node.label.c_str());
 		}
 		std::puts("</title></rect>");
 		std::printf(R"(<text x="%d" y="%d">)", fnode.x + node_text_hpadding, fnode.y + node_text_vpadding);
-		if (size_t(title_chars) >= desc.func.size() + node.label.size()) {
+		if (title_chars > 0 && size_t(title_chars) >= desc.func.size() + node.label.size()) {
 			std::printf("%s: %s", desc.func.c_str(), node.label.c_str());
-		} else if (size_t(title_chars) >= node.label.size()) {
+		} else if (title_chars > 0 && size_t(title_chars) >= node.label.size()) {
 			std::puts(node.label.c_str());
 		} else {
-			std::printf("%.*s...", std::max(0, title_chars - 3), node.label.c_str());
+			std::printf("%.*s...", int(std::max(0l, title_chars - 3)), node.label.c_str());
 		}
 		std::puts("</text>");
 	}
@@ -185,9 +187,9 @@ dump_flow(const Graph &g, double timescale)
 		int endx = ftail.x;
 		int endy = ftail.y + node_height / 2;
 		edge_arrows.emplace_back(FlowEdgeArrow{endx, endy});
-		if (fhead.y == ftail.y && (double(ftail.node.begin_ns) - fhead.node.end_ns) * timescale < 10) {
+		if (fhead.y == ftail.y && double(ftail.node.begin_ns - fhead.node.end_ns) * timescale < 10) {
 			continue; // skip edges shorter than arrow
-		} else if ((double(fhead.node.end_ns) - edge.ts_ns) * timescale < 8) {
+		} else if (double(fhead.node.end_ns - edge.ts_ns) * timescale < 8) {
 			// path from end of node
 			int startx = fhead.x + fhead.width;
 			int starty = fhead.y + node_height / 2;
@@ -195,8 +197,9 @@ dump_flow(const Graph &g, double timescale)
 		} else {
 			// path from intra-node
 			bool bottom = ftail.y > fhead.y;
-			int dns = edge.ts_ns - fhead.node.begin_ns;
-			int startx = fhead.x + dns * timescale;
+			assert(edge.ts_ns - fhead.node.begin_ns < std::numeric_limits<int>::max());
+			int dns = int(edge.ts_ns - fhead.node.begin_ns);
+			int startx = int(std::lround(fhead.x + dns * timescale));
 			int starty = fhead.y + (bottom ? node_height : 0);
 			edges.emplace_back(FlowEdge{edge.head, edge.tail, startx, starty, endx, endy, FlowEdgeFlags::Intermediate});
 			starty += bottom ? -edge_annotation_vpadding : edge_annotation_vpadding;
@@ -275,9 +278,9 @@ flow_nodes(const Graph &g, double timescale)
 {
 	std::vector<FlowNode> fnodes;
 	for (const auto &node : g.nodes) {
-		int x = (node.begin_ns - g.begin_ns) * timescale;
-		int y = header_height + thread_lane_vpadding + node.thread * thread_lane_height;
-		int width = std::max(1.0, (node.end_ns - node.begin_ns) * timescale);
+		int x = int(double(node.begin_ns - g.begin_ns) * timescale);
+		int y = header_height + thread_lane_vpadding + int(node.thread) * thread_lane_height;
+		int width = int(std::max(1.0, double(node.end_ns - node.begin_ns) * timescale));
 		fnodes.emplace_back(FlowNode{node, node.task, x, y, width});
 	}
 	return fnodes;
