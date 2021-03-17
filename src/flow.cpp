@@ -189,7 +189,7 @@ dump_flow(const Graph &g, double timescale)
 		edge_arrows.emplace_back(FlowEdgeArrow{endx, endy});
 		if (fhead.y == ftail.y && double(ftail.node.begin_ns - fhead.node.end_ns) * timescale < 10) {
 			continue; // skip edges shorter than arrow
-		} else if (double(fhead.node.end_ns - edge.ts_ns) * timescale < 8) {
+		} else if (double(edge.ts_ns - fhead.node.end_ns) * timescale < 8) {
 			// path from end of node
 			int startx = fhead.x + fhead.width;
 			int starty = fhead.y + node_height / 2;
