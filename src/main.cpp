@@ -6,19 +6,20 @@
 
 static void usage();
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	try {
 		Graph g;
 		OutputFormat format = OutputFormat::DeadlockFlow;
+		// TODO: tiemscape should be determined from the input
 		double timescale = 1.0 / 10'000; // 1px = 100us
 		if (argc <= 1) {
 			usage();
 			throw std::runtime_error("Too few arguments");
 		}
 		for (int i = 1; i < argc; ++ i) {
-			if (strcmp(argv[i], "-h") == 0 ||
+			if (argv[i] == nullptr ||
+			    strcmp(argv[i], "-h") == 0 ||
 			    strcmp(argv[i], "--help") == 0)
 			{
 				usage();
@@ -65,8 +66,7 @@ main(int argc, char **argv)
 	return EXIT_SUCCESS;
 }
 
-static void
-usage()
+static void usage()
 {
 	std::cerr << "Usage: deadlock-graph [-d] [--|file]\n"
 	          << "Options:\n"

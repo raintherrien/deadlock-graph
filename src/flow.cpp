@@ -7,6 +7,11 @@
 #include <cmath>
 #include <cstdio>
 
+//
+// The Flow graph format is evolving pretty randomly as I experiment.
+// TODO: This code really needs to be cleaned up. Way too many magic numbers.
+//
+
 struct FlowNode {
 	const Node &node;
 	unsigned long task;
@@ -51,8 +56,7 @@ constexpr int edge_triangle_offset = 5;
 constexpr int edge_annotation_vpadding = 2;
 constexpr int edge_spawn_annotation_buffer = 8;
 
-void
-dump_flow(const Graph &g, double timescale)
+void dump_flow(const Graph &g, double timescale)
 {
 	const auto fnodes = flow_nodes(g, timescale);
 

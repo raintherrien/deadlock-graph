@@ -11,6 +11,14 @@ enum class OutputFormat {
 	DeadlockFlow
 };
 
+//
+// This is more or less the definitive file format specification of deadlock
+// graphs. It's pretty self explanatory and all plain text, avoiding any
+// network byte order issues.
+//
+// TODO: Document components
+//
+
 struct NodeDescription {
 	std::string file;
 	std::string func;

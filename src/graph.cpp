@@ -8,6 +8,10 @@ Graph::Graph(std::istream &f)
 	std::size_t line;
 	std::stringstream ls;
 
+	// The deadlock graph file format is plain text. This parser uses
+	// slurp_line and expect to perform validation. Other than that it's
+	// pretty simple istream stuff.
+
 	auto slurp_line = [&]() {
 		std::string l;
 		++ line;
@@ -21,7 +25,9 @@ Graph::Graph(std::istream &f)
 		if (rest == e) {
 			return;
 		}
-		throw std::runtime_error("Expected \"" + e	+ "\" on line " + std::to_string(line) + " but found \"" + rest + "\"");
+		throw std::runtime_error("Expected \"" + e + "\" "
+		                         "on line " + std::to_string(line) +
+		                         " but found \"" + rest + "\"");
 	};
 
 	// Read number of node descriptions

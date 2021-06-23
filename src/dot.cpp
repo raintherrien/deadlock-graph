@@ -2,10 +2,10 @@
 
 #include <cstdio>
 
-void
-dump_dot(const Graph &g)
+// TODO: C++20 std::format, unsupported by current GCC/Clang
+void dump_dot(const Graph &g)
 {
-
+	// Prioritize output file size over readability
 	std::puts("digraph G{");
 	for (const auto &node : g.nodes) {
 		const auto &desc = g.node_descriptions[node.description];
